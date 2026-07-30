@@ -1,0 +1,108 @@
+HƯỚNG DẪN: LƯU KẾT QUẢ RSVP VÀO GOOGLE SHEET
+================================================
+
+Ý tưởng: Google Apps Script đóng vai trò "backend" miễn phí. Thiệp gửi
+dữ liệu (tên khách, có tham dự không, số người, lời nhắn) tới một link
+Apps Script, script đó tự ghi thêm 1 dòng vào Google Sheet của bạn.
+
+
+BƯỚC 1 — Tạo Google Sheet
+--------------------------------
+1. Vào sheets.google.com → tạo file mới, đặt tên vd "RSVP - Hải & Phương".
+2. Không cần tạo cột tiêu đề trước, script sẽ tự tạo.
+
+
+BƯỚC 2 — Mở Apps Script
+--------------------------------
+1. Trong Google Sheet vừa tạo: menu Extensions (Tiện ích mở rộng) → Apps Script.
+2. Xoá hết code mẫu có sẵn (myFunction() {}), dán đoạn code dưới đây vào:
+
+--------------------------------------------------------------
+function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('RSVP');
+  if (!sheet) {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet('RSVP');
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Thời gian', 'Tên khách', 'Trạng thái', 'Số người', 'Lời nhắn']);
+  }
+
+  var data = JSON.parse(e.postData.contents);
+
+  var statusText = data.status;
+  if (statusText === 'yes') statusText = 'Tham dự';
+  else if (statusText === 'maybe') statusText = 'Đang cân nhắc';
+  else if (statusText === 'no') statusText = 'Vắng mặt';
+
+  sheet.appendRow([
+    new Date(),
+    data.guest || '',
+    statusText || '',
+    data.qty || '',
+    data.msg || ''
+  ]);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: 'success' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+--------------------------------------------------------------
+
+3. Bấm biểu tượng 💾 (Save), đặt tên project tuỳ ý (vd "RSVP Handler").
+
+
+BƯỚC 3 — Deploy thành Web App
+--------------------------------
+1. Góc trên phải, bấm nút xanh "Deploy" → "New deployment".
+2. Bấm biểu tượng ⚙️ cạnh "Select type" → chọn "Web app".
+3. Điền:
+   - Description: RSVP handler (tuỳ ý)
+   - Execute as: Me (tài khoản của bạn)
+   - Who has access: Anyone   ⚠️ QUAN TRỌNG — phải chọn "Anyone",
+     nếu để "Only myself" thì thiệp sẽ không gửi được dữ liệu.
+4. Bấm "Deploy".
+5. Lần đầu sẽ hiện màn hình xin quyền truy cập (Authorize access) →
+   chọn tài khoản Google của bạn → bấm "Advanced" → "Go to (tên project) (unsafe)"
+   → "Allow". (Đây là cảnh báo mặc định của Google cho script tự viết,
+   không phải lỗi — vì Google chưa "duyệt" app của bạn, nhưng vì bạn tự
+   viết và tự dùng nên hoàn toàn an toàn.)
+6. Sau khi deploy xong, copy đoạn "Web app URL" — dạng:
+   https://script.google.com/macros/s/AKfycbxxxxxxxxxxxxxxxxxxxx/exec
+
+
+BƯỚC 4 — Dán link vào file thiệp
+--------------------------------
+1. Mở file index.html bằng Notepad/VS Code.
+2. Tìm dòng (Ctrl+F gõ "SHEET_WEBAPP_URL"):
+
+     const SHEET_WEBAPP_URL = '';
+
+3. Dán link vừa copy vào giữa hai dấu nháy:
+
+     const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxxxx.../exec';
+
+4. Lưu file, deploy lại lên Vercel (chạy lại lệnh `vercel` trong thư mục project,
+   hoặc nếu bạn nối GitHub thì chỉ cần commit + push, Vercel tự deploy lại).
+
+
+BƯỚC 5 — Test thử
+--------------------------------
+1. Mở link thiệp thật trên điện thoại, chạm mở phong bì, cuộn xuống RSVP.
+2. Chọn 1 trong 3 lựa chọn, ghi lời nhắn thử, bấm "Gửi phản hồi".
+3. Mở lại Google Sheet — sau vài giây sẽ thấy 1 dòng mới xuất hiện.
+4. Nếu không thấy dòng nào:
+   - Kiểm tra lại "Who has access" đã để "Anyone" chưa (bước 3).
+   - Kiểm tra đã dán đúng link vào SHEET_WEBAPP_URL và deploy lại chưa.
+   - Mở Console trình duyệt (F12 → tab Console) xem có lỗi đỏ không.
+
+
+LƯU Ý
+--------------------------------
+- Mỗi lần bạn sửa code trong Apps Script, phải bấm lại "Deploy" →
+  "Manage deployments" → biểu tượng bút chì → "New version" → Deploy,
+  nếu không thay đổi sẽ không có hiệu lực.
+- Google Sheet này miễn phí, không giới hạn số lượng RSVP thực tế cho quy mô
+  1 đám cưới (vài trăm khách vẫn thoải mái).
+- Vì dùng mode:'no-cors' khi gửi, trình duyệt sẽ không báo lỗi ngay cả khi
+  link sai — nên nhớ luôn TEST THẬT bằng cách gửi thử rồi kiểm tra Sheet,
+  đừng chỉ tin vào việc trang không báo lỗi.
